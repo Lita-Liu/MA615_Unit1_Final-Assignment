@@ -1,0 +1,203 @@
+---
+title: "MA615_Berries_Kunyu Liu"
+author: "Kunyu Liu"
+date: "10/15/2020"
+output:
+  pdf_document: 
+    latex_engine: xelatex
+    keep_tex: yes
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,out.width="0.9\\linewidth",dev="pdf",fig.align  = 'center')
+pacman::p_load(
+  "tidyverse"
+)
+
+knitr::include_graphics
+```
+
+***
+
+# Introduction
+The berries data were collected from the USDA database and stored online[^1], which contains blueberries, raspberries, and strawberries. 
+***
+# Data Cleaning
+
+## Data Import
+
+```{r}
+berries = read.csv('berries.csv', header = TRUE)
+im1 = berries %>%
+  select(Year,Period,State,Commodity,Data.Item,Domain,Domain.Category,Value)
+head(im1)
+```
+## Initial Screening of the Data
+
+There are many categorical variables, we need to replace many (D),(NA),(X) and (Z) with NA in Value, because this column is defined as categorical. 
+
+```{r}
+im1$Value <- as.numeric(im1$Value)
+# Replace (D),(NA),(X) and (Z) with NA
+im1[im1 =="(D)"] = NA
+im1[im1 =="(NA)"] = NA
+im1[im1 =="(X)"] = NA
+im1[im1 =="(Z)"] = NA
+
+# summary the new dataset
+summary(im1)
+```
+
+## Further data cleaning on strawberries
+
+### Cleaning - `Data Item`
+Use `filter` function for extracting data of strawberries
+
+```{r}
+im2 = im1 %>% filter(Commodity=="STRAWBERRIES")
+summary(im2)
+
+strawberry1 = im2 %>% drop_na()
+
+pre = strawberry1$Data.Item
+m1 = gsub(" - ",",",pre)
+
+unit1 = str_extract_all(m1, "MEASURED.*[^./AVG]|ACRES")
+unit1 = str_replace(unit1, ",","")
+unit1 = trimws(1)
+```
+```{r}
+type1 = str_extract_all(m1,"(FRESHMARKET)|(PROCESSING)")
+type_data = data.frame(Market.Channel=as.character(type1))
+type_data[type_data=="character(0)"] = NA
+```
+
+***
+# EDA
+## Data exploration
+### Summarize Data
+Because the measurement of each data are different, we need to group and summarize them.
+```{r warning=FALSE}
+# Measurement of the strawberry
+strawberry1$unit = str_extract_all(m1,"MEASURED IN.*[^, /AVG]|ACRES.*")
+strawberry1$unit = as.character(strawberry1$unit)
+sum1 = strawberry1 %>%
+  group_by(unit)%>%
+  summarize(
+    count=n(),
+    value=sum(Value)
+    )
+```
+
+### Plot the whole dataset
+```{r}
+a1 = ggplot(data = sum1, mapping = aes(x = unit, y = count))+
+   geom_point()
+print(a1)
+a2 = ggplot(data = sum1, mapping = aes(x = unit, y = value, size = count)) +
+  geom_point(shape=21, alpha = 0.5) 
+print(a2)
+```
+From the first plot, we can see the number of each measurement. The second plot shows the reason for seperate variable item.
+
+## Further EDA
+### Creat a new frame in order to exact data to do the further EDA
+
+```{r}
+unit_new = strawberry1 %>%
+  group_by(unit)%>%
+  summarize(
+    state=State,
+    year= Year,
+    count=n(),
+    value=Value
+    )
+
+tail(unit_new)
+```
+```{r}
+# Do a plot, excluding outliers
+boxplot = ggplot(unit_new, aes(x = unit, y = value))+ 
+  geom_boxplot(outlier.colour = NA,notch = TRUE) +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1),
+        axis.text = element_text(size = 7),
+        axis.title = element_text(size = 13, face = "bold")) +
+  coord_cartesian(ylim = c(0, 1000)) 
+print(boxplot)
+```
+### Creat a data frame contain MEASURED IN LB
+
+```{r}
+LB = filter(unit_new,unit=="MEASURED IN LB" )
+LB$value = as.numeric(LB$value)
+LB$value[LB$value ==0] = NA
+LB_new = group_by(LB,year,state)
+LB_final = summarize(LB_new, value = mean(value, na.rm = TRUE))
+summary(LB_final)
+
+# Making plot
+a3 = ggplot(LB_final, aes(x = year, y = value))+
+  geom_point(aes(color=state))
+print(a3)
+```
+From the plot above, we can see that California always has the highest value in each year when we measured in LB, except in year 2016.
+
+### Making boxplot of MEASURED IN LB
+```{r}
+# excluding outliers
+bp1 = ggplot(LB_final, aes(x = year, y = value))
+bp1 = bp1 + geom_boxplot(outlier.colour = NA) +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1),
+        axis.text = element_text(size = 11),
+        axis.title = element_text(size = 13, face = "bold")) +
+  coord_cartesian(ylim = c(200, 1000)) +
+  labs(x = "LB_final")
+print(bp1)
+```
+From the boxplot, we can find the value for LB_final is between 400-700
+
+### Creat a data frame contain MEASURED IN  $ / CWT
+```{r}
+
+CWT = filter(unit_new,unit=="MEASURED IN $ / CWT" )
+CWT$value = as.numeric(CWT$value)
+CWT$value[CWT$value ==0] = NA
+CWT_new = group_by(CWT,year,state)
+CWT_final = summarize(CWT_new, value = mean(value, na.rm = TRUE))
+summary(CWT_final)
+
+# Making plot
+a4 = ggplot(CWT_final, aes(x = year, y = value))+
+  geom_point(aes(color=state))
+print(a4)
+```
+From the plot above, we can see that New York has the highest value in each year when we measured in $ / CWT.
+
+### Making boxplot of MEASURED IN  $ / CWT
+```{r}
+# excluding outliers
+bp2 = ggplot(CWT_final, aes(x = year, y = value))
+bp2 = bp2 + geom_boxplot(outlier.colour = NA) +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1),
+        axis.text = element_text(size = 11),
+        axis.title = element_text(size = 13, face = "bold")) +
+  coord_cartesian(ylim = c(0, 300)) +
+  labs(x = "CWT_final")
+print(bp2)
+```
+From the boxplot, we can find the value for CWT_final is between 100-200
+
+***
+# Discussion
+From the analysis we did above, we can conclude that the California is a good state for buying strawberry, but further analysis is needed in better determine this conclusion, because some states have missing values for some variables. Thus, we need further analysis to find out all the states have the same measurement.
+
+***
+
+# References
+
+[^1]: [Berry Dataset](https://quickstats.nass.usda.gov/results/D416E96E-3D5C-324C-9334-1D38DF88FFF1)
+
+
+
+
